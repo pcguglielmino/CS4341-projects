@@ -8,6 +8,7 @@ from enum import Enum
 from colorama import Fore, Back
 from Q_WEIGHTS import Q_WEIGHTS
 from random import seed, random, choice
+import math
 
 
 class Actions(Enum):
@@ -48,17 +49,20 @@ class TestCharacter(CharacterEntity):
 
     def __init__(self, name, avatar, x, y):
         CharacterEntity.__init__(self, name, avatar, x, y)
-        self.learning_limit = 50
+        self.learning_limit = 5000
         self.learning_step = self.learning_limit
         self.is_learning = True
         self.discount = 0.9
-        seed(1)
+        self.epsilon_start = 0.95
+        self.epsilon = self.epsilon_start
+        self.epsilon_rate = 2  # How fast should epsilon decrease
+        seed(2)
 
     def do(self, wrld):
         # Your code here
 
         # List of functions to use to approximate the Q state (add to this as more functions are implemented)
-        lof = [self.distance_to_exit, self.go_left]
+        lof = [self.distance_to_exit]
 
         low = self.get_next_worlds(wrld)  # list of worlds in (world, action.name) tuples
 
@@ -68,8 +72,10 @@ class TestCharacter(CharacterEntity):
         for i in range(len(low)):
             loq.append((q_value(low[i][0][0], lof), low[i][1], low[i][0][0]))
 
-        action_tuple = self.select_action(
-            loq)  # This tuple defines the action that the agent will take (value, action.name, world)
+        # This tuple defines the action that the agent will take (value, action.name, world)
+        action_tuple = self.select_action(loq)
+
+        self.epsilon = self.epsilon_start * math.exp(-(1/(self.learning_limit*self.epsilon_rate))*(5000 - wrld.time))
 
         # If the agent is learning, this step will do the approximate Q-learning weight adjustment based on the function
         # learned in class. The agent will stop learning based on the learning_limit set in __init__()
@@ -145,26 +151,13 @@ class TestCharacter(CharacterEntity):
         else:
             return 1
 
-    def go_left(self, wrld):
-        me = wrld.me(self)
-        if me is not None:
-            new_x = me.x
-            current_x = self.x
-
-            if new_x < current_x:
-                return 1
-            else:
-                return 0
-        else:
-            return 0
-
-    # This functions selects an action from a list of q_values
+    # This functions selects an action from the list of q_values
     def select_action(self, loq):
         val = random()
-        if val > 0.1:
-            return max(loq)
-        else:
+        if val < self.epsilon:
             return choice(loq)
+        else:
+            return max(loq)
 
     def get_next_worlds(self, wrld):
 

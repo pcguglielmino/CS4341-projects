@@ -1,1 +1,1 @@
-Q_WEIGHTS = {'distance_to_exit': -14.419046168135319}
+Q_WEIGHTS = {'distance_to_exit': -1.8601309876851708}
