@@ -23,6 +23,7 @@ class Actions(Enum):
     LEFT_UP = 7
     BOMB = 8
     STAY = 9
+    FOLLOW_A_STAR = 10
 
 
 # This function iterates through the Q_table containing the function names and the weights of those functions,
@@ -57,12 +58,13 @@ class TestCharacter(CharacterEntity):
         self.epsilon_start = 0.95
         self.epsilon = self.epsilon_start
         self.epsilon_rate = 2  # How fast should epsilon decrease
+        self.path = []
         seed(2)
 
     def do(self, wrld):
         # List of functions to use to approximate the Q state (add to this as more functions are implemented)
 
-        test3 = self.get_a_star(wrld)
+        self.path = self.get_a_star(wrld)
 
         lof = [self.distance_to_exit, self.nearbyMonster, self.nearbyExplosion, self.nearbyWall, self.isThereMonster]
 
@@ -112,6 +114,11 @@ class TestCharacter(CharacterEntity):
         self.move(0, 0)
 
         action = action_tuple[1]
+
+        action = "FOLLOW_A_STAR"
+
+        if action == 'FOLLOW_A_STAR':
+            action = self.get_action_to_coord(self.path.pop(0))
 
         if action == 'UP':
             self.move(0, -1)
@@ -237,14 +244,15 @@ class TestCharacter(CharacterEntity):
 
     def isThereMonster(self, wrld):
         me = wrld.me(self)
-        x = me.x
-        y = me.y
-        width = wrld.width()
-        heigth = wrld.height()
-        for i in range(0, heigth):
-            for j in range(0, width):
-                if wrld.monsters_at(i, j):
-                    return 1
+        if me is not None:
+            x = me.x
+            y = me.y
+            width = wrld.width()
+            heigth = wrld.height()
+            for i in range(0, heigth):
+                for j in range(0, width):
+                    if wrld.monsters_at(i, j):
+                        return 1
         return 0
 
     # This functions selects an action from the list of q_values
@@ -283,6 +291,9 @@ class TestCharacter(CharacterEntity):
                     pass
                 elif member == Actions.STAY:
                     me.move(0, 0)
+                elif member == Actions.FOLLOW_A_STAR:
+                    pass
+                    # me.move
                 list_of_worlds.append((wrld.next(), name))
         else:
             list_of_worlds.append((wrld.next(), "DEAD"))
@@ -311,6 +322,7 @@ class TestCharacter(CharacterEntity):
             action = "UP"
         elif coord == (x + 1, y - 1):
             action = "UP_RIGHT"
+        return action
 
 
 def heuristic(a, b):
@@ -356,16 +368,19 @@ def a_star(wrld, start, goal):
                 priority = cost + heuristic(goal, child)
                 queue.put(child, priority)
                 came_from[child] = current
-    return costs, came_from, generate_path(came_from, goal)
-    # return queue
+    path = generate_path(came_from, goal)
+    return path
 
 
-def generate_path(came_from, end):
-    current = end
-    path = []
+def generate_path(came_from, goal):
+    current = goal
+    path = [goal]
     while current is not None:
         path.append(came_from[current])
         current = came_from[current]
+    path.reverse()
+    path.remove(None)
+    path.pop(0)
     return path
 
 
