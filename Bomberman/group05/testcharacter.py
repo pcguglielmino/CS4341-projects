@@ -8,6 +8,7 @@ from enum import Enum
 from colorama import Fore, Back
 from Q_WEIGHTS import Q_WEIGHTS
 from random import seed, random, choice
+from queue import PriorityQueue
 import math
 
 
@@ -62,7 +63,7 @@ class TestCharacter(CharacterEntity):
         # Your code here
 
         # List of functions to use to approximate the Q state (add to this as more functions are implemented)
-        lof = [self.distance_to_exit]
+        lof = [self.distance_to_exit, self.nearbyMonster, self.nearbyExplosion, self.nearbyWall, self.isThereMonster]
 
         low = self.get_next_worlds(wrld)  # list of worlds in (world, action.name) tuples
 
@@ -132,9 +133,25 @@ class TestCharacter(CharacterEntity):
         elif action == 'LEFT_UP':
             self.move(-1, -1)
         elif action == 'BOMB':
-            self.place_bomb()
+            pass
+            #self.place_bomb()
         elif action == 'STAY':
             self.move(0, 0)
+
+    # def distance_to_exit(self, wrld):
+    #     me = wrld.me(self)
+    #     if me is not None:
+    #         x = me.x
+    #         y = me.y
+    #         x_d = wrld.exitcell[0]
+    #         y_d = wrld.exitcell[1]
+    #
+    #         # Normalization factor
+    #         norm = (wrld.width() ** 2 + wrld.height() ** 2) ** .5
+    #
+    #         return (((x - x_d) ** 2 + (y - y_d) ** 2) ** .5) / norm
+    #     else:
+    #         return 1
 
     def distance_to_exit(self, wrld):
         me = wrld.me(self)
@@ -144,12 +161,94 @@ class TestCharacter(CharacterEntity):
             x_d = wrld.exitcell[0]
             y_d = wrld.exitcell[1]
 
-            # Normalization factor
-            norm = (wrld.width() ** 2 + wrld.height() ** 2) ** .5
+            return a_star(wrld, (x, y), (x_d, y_d))
 
-            return (((x - x_d) ** 2 + (y - y_d) ** 2) ** .5) / norm
-        else:
-            return 1
+    def nearbyMonster(self, wrld):
+        me = wrld.me(self)
+        if me is not None:
+            x = me.x
+            y = me.y
+            width = wrld.width()
+            heigth = wrld.height()
+            if x - 1 >= 0:
+                if wrld.monsters_at(x - 1, y): return 1
+            if y + 1 < heigth:
+                if wrld.monsters_at(x, y + 1): return 1
+            if x + 1 < width:
+                if wrld.monsters_at(x + 1, y): return 1
+            if y - 1 >= 0:
+                if wrld.monsters_at(x, y - 1): return 1
+            if x - 1 >= 0 and y + 1 < heigth:
+                if wrld.monsters_at(x - 1, y + 1): return 1
+            if x + 1 < width and y + 1 < heigth:
+                if wrld.monsters_at(x + 1, y + 1): return 1
+            if x - 1 >= 0 and y - 1 >= 0:
+                if wrld.monsters_at(x - 1, y - 1): return 1
+            if x + 1 < width and y - 1 >= 0:
+                if wrld.monsters_at(x + 1, y - 1): return 1
+        return 0
+
+    def nearbyWall(self, wrld):
+        me = wrld.me(self)
+        if me is not None:
+            x = me.x
+            y = me.y
+            width = wrld.width()
+            heigth = wrld.height()
+            if x - 1 >= 0:
+                if wrld.wall_at(x - 1, y): return 1
+            if y + 1 < heigth:
+                if wrld.wall_at(x, y + 1): return 1
+            if x + 1 < width:
+                if wrld.wall_at(x + 1, y): return 1
+            if y - 1 >= 0:
+                if wrld.wall_at(x, y - 1): return 1
+            if x - 1 >= 0 and y + 1 < heigth:
+                if wrld.wall_at(x - 1, y + 1): return 1
+            if x + 1 < width and y + 1 < heigth:
+                if wrld.wall_at(x + 1, y + 1): return 1
+            if x - 1 >= 0 and y - 1 >= 0:
+                if wrld.wall_at(x - 1, y - 1): return 1
+            if x + 1 < width and y - 1 >= 0:
+                if wrld.wall_at(x + 1, y - 1): return 1
+        return 0
+
+    def nearbyExplosion(self, wrld):
+        me = wrld.me(self)
+        if me is not None:
+            x = me.x
+            y = me.y
+            width = wrld.width()
+            heigth = wrld.height()
+            if x - 1 >= 0:
+                if wrld.explosion_at(x - 1, y): return 1
+            if y + 1 < heigth:
+                if wrld.explosion_at(x, y + 1): return 1
+            if x + 1 < width:
+                if wrld.explosion_at(x + 1, y): return 1
+            if y - 1 >= 0:
+                if wrld.explosion_at(x, y - 1): return 1
+            if x - 1 >= 0 and y + 1 < heigth:
+                if wrld.explosion_at(x - 1, y + 1): return 1
+            if x + 1 < width and y + 1 < heigth:
+                if wrld.explosion_at(x + 1, y + 1): return 1
+            if x - 1 >= 0 and y - 1 >= 0:
+                if wrld.explosion_at(x - 1, y - 1): return 1
+            if x + 1 < width and y - 1 >= 0:
+                if wrld.explosion_at(x + 1, y - 1): return 1
+        return 0
+
+    def isThereMonster(self, wrld):
+        me = wrld.me(self)
+        x = me.x
+        y = me.y
+        width = wrld.width()
+        heigth = wrld.height()
+        for i in range(0, heigth):
+            for j in range(0, width):
+                if wrld.monsters_at(i, j):
+                    return 1
+        return 0
 
     # This functions selects an action from the list of q_values
     def select_action(self, loq):
@@ -183,7 +282,8 @@ class TestCharacter(CharacterEntity):
                 elif member == Actions.LEFT_UP:
                     me.move(-1, -1)
                 elif member == Actions.BOMB:
-                    me.place_bomb()
+                    #me.place_bomb()
+                    pass
                 elif member == Actions.STAY:
                     me.move(0, 0)
                 list_of_worlds.append((wrld.next(), name))
@@ -191,3 +291,50 @@ class TestCharacter(CharacterEntity):
             list_of_worlds.append((wrld.next(), "DEAD"))
 
         return list_of_worlds
+
+
+
+def heuristic(a, b):
+    (x1, y1) = a
+    (x2, y2) = b
+    return abs(x1 - x2) + abs(y1 - y2)
+
+
+def a_star(wrld, start, goal):
+    queue = PriorityQueue()
+    queue.put(start, 0)
+    came_from = {}
+    costs = {}
+    came_from[start] = None
+    costs[start] = 0
+    children = []
+
+    while not queue.empty():
+        current = queue.get()
+        if current == goal:
+            break
+        (x, y) = current
+        if x - 1 >= 0:
+            children.append((x - 1, y))
+        if y + 1 < wrld.height():
+            children.append((x, y + 1))
+        if x + 1 < wrld.width():
+            children.append((x + 1, y))
+        if y - 1 >= 0:
+            children.append((x, y - 1))
+        if x - 1 >= 0 and y + 1 < wrld.height():
+            children.append((x - 1, y + 1))
+        if x + 1 < wrld.width() and y + 1 < wrld.height():
+            children.append((x + 1, y + 1))
+        if x - 1 >= 0 and y - 1 >= 0:
+            children.append((x - 1, y - 1))
+        if x + 1 < wrld.width() and y - 1 >= 0:
+            children.append((x + 1, y - 1))
+        for child in children:
+            cost = costs[current] + 1
+            if child not in costs or cost < costs[child]:
+                costs[child] = cost
+                priority = cost + heuristic(goal, child)
+                queue.put(child, priority)
+                came_from[child] = current
+    return costs[goal]
