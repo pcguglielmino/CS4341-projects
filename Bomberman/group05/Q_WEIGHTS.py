@@ -1,1 +1,1 @@
-Q_WEIGHTS = {'path_length': 26099.107094204748, 'nearbyMonster': 0.0, 'nearbyExplosion': 0.0, 'nearbyWall': 2437.184712861795, 'isThereMonster': 0.0}
+Q_WEIGHTS = {'path_length': 43359493063.54106, 'nearby_monster': 0.0, 'nearby_wall': 670777903478.4492, 'is_there_monster': -127528357207.55473, 'bomb_threat': -3550539422.6529083, 'explosion_threat': 177452949449.97333}
