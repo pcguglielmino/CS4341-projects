@@ -69,7 +69,7 @@ class TestCharacter(CharacterEntity):
         self.path = self.get_a_star(wrld)
         self.path_search = 0
 
-        lof = [self.path_length, self.nearbyMonster, self.nearbyExplosion, self.nearbyWall, self.isThereMonster]
+        lof = [self.path_length, self.nearbyMonster, self.nearbyExplosion, self.nearbyWall, self.isThereMonster, self.distance_to_monster, self.nearbyBomb, self.isThereUnbreakableWall]
 
         low = self.get_next_worlds(wrld)  # list of worlds in (world, action.name) tuples
 
@@ -158,6 +158,24 @@ class TestCharacter(CharacterEntity):
         else:
             return 1
 
+    def distance_to_monster(self, wrld):
+        me = wrld.me(self)
+        if me is not None:
+            x = me.x
+            y = me.y
+            distance = 1000000
+            width = wrld.width()
+            heigth = wrld.height()
+            for i in range(0, heigth):
+                for j in range(0, width):
+                    if wrld.monsters_at(i, j):
+                        norm = (wrld.width() ** 2 + wrld.height() ** 2) ** .5
+                        d = (((x - i) ** 2 + (y - j) ** 2) ** .5) / norm
+                        distance = min(d, distance)
+            if distance != 1000000:
+                return distance
+        return 0
+
     def path_length(self, wrld):
         path = self.get_a_star(wrld)
         if path is not None:
@@ -224,6 +242,48 @@ class TestCharacter(CharacterEntity):
             if x + 1 < width and y - 1 >= 0:
                 if wrld.wall_at(x + 1, y - 1): return 0
         return 1
+
+    def nearbyBomb(self, wrld):
+        me = wrld.me(self)
+        if me is not None:
+            x = me.x
+            y = me.y
+            width = wrld.width()
+            heigth = wrld.height()
+            if x - 1 >= 0:
+                if wrld.bomb_at(x - 1, y): return 1
+            if y + 1 < heigth:
+                if wrld.bomb_at(x, y + 1): return 1
+            if x + 1 < width:
+                if wrld.bomb_at(x + 1, y): return 1
+            if y - 1 >= 0:
+                if wrld.bomb_at(x, y - 1): return 1
+            if x - 1 >= 0 and y + 1 < heigth:
+                if wrld.bomb_at(x - 1, y + 1): return 1
+            if x + 1 < width and y + 1 < heigth:
+                if wrld.bomb_at(x + 1, y + 1): return 1
+            if x - 1 >= 0 and y - 1 >= 0:
+                if wrld.bomb_at(x - 1, y - 1): return 1
+            if x + 1 < width and y - 1 >= 0:
+                if wrld.bomb_at(x + 1, y - 1): return 1
+        return 0
+
+    def isThereUnbreakableWall(self, wrld):
+        me = wrld.me(self)
+        if me is not None:
+            x = me.x
+            y = me.y
+            width = wrld.width()
+            heigth = wrld.height()
+            if x == 1:
+                if wrld.wall_at(x - 1, y): return 1
+            if y == 1:
+                if wrld.wall_at(x, y - 1): return 1
+            if x == width - 2:
+                if wrld.wall_at(x + 1, y): return 1
+            if y == heigth - 2:
+                if wrld.wall_at(x, y + 1): return 1
+        return 0
 
     def nearbyExplosion(self, wrld):
         me = wrld.me(self)
