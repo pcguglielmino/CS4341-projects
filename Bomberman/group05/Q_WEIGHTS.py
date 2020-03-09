@@ -1,1 +1,1 @@
-Q_WEIGHTS = {'distance_to_exit': 1.9516017188264153e+35, 'nearbyMonster': -10.568145805619604, 'nearbyExplosion': 0.0, 'nearbyWall': 2.60025408654968e+34, 'isThereMonster': 0.0}
+Q_WEIGHTS = {'distance_to_exit': 1.673326817410381e+49, 'nearbyMonster': -10.568145805619604, 'nearbyExplosion': 0.0, 'nearbyWall': -4.384455989703102e+47, 'isThereMonster': 0.0}

@@ -60,20 +60,21 @@ class TestCharacter(CharacterEntity):
         seed(2)
 
     def do(self, wrld):
-        # Your code here
-
         # List of functions to use to approximate the Q state (add to this as more functions are implemented)
+
+        test3 = self.get_a_star(wrld)
+
         lof = [self.distance_to_exit, self.nearbyMonster, self.nearbyExplosion, self.nearbyWall, self.isThereMonster]
 
         low = self.get_next_worlds(wrld)  # list of worlds in (world, action.name) tuples
 
-        loq = []  # list of q-values in (value, action.name, world) tuples
+        loq = []  # list of q-values in (value, action.name, world, event) tuples
 
         # Calculate Q-values of possible world states
         for i in range(len(low)):
-            loq.append((q_value(low[i][0][0], lof), low[i][1], low[i][0][0]))
+            loq.append((q_value(low[i][0][0], lof), low[i][1], low[i][0][0], low[i][0][1]))
 
-        # This tuple defines the action that the agent will take (value, action.name, world)
+        # This tuple defines the action that the agent will take (value, action.name, world, events)
         action_tuple = self.select_action(loq)
 
         self.epsilon = self.epsilon_start * math.exp(-(1/(self.learning_limit*self.epsilon_rate))*(5000 - wrld.time))
@@ -92,10 +93,6 @@ class TestCharacter(CharacterEntity):
 
                 for i in range(len(lonw)):
                     lonq.append((q_value(lonw[i][0][0], lof), lonw[i][1], lonw[i][0][0]))
-
-                # if not lonq:
-                #     print("see")
-
 
                 q_s_prime_a_prime = max(lonq)[0]
                 delta = r + self.discount * q_s_prime_a_prime - q_s_a
@@ -138,22 +135,22 @@ class TestCharacter(CharacterEntity):
         elif action == 'STAY':
             self.move(0, 0)
 
-    # def distance_to_exit(self, wrld):
-    #     me = wrld.me(self)
-    #     if me is not None:
-    #         x = me.x
-    #         y = me.y
-    #         x_d = wrld.exitcell[0]
-    #         y_d = wrld.exitcell[1]
-    #
-    #         # Normalization factor
-    #         norm = (wrld.width() ** 2 + wrld.height() ** 2) ** .5
-    #
-    #         return (((x - x_d) ** 2 + (y - y_d) ** 2) ** .5) / norm
-    #     else:
-    #         return 1
-
     def distance_to_exit(self, wrld):
+        me = wrld.me(self)
+        if me is not None:
+            x = me.x
+            y = me.y
+            x_d = wrld.exitcell[0]
+            y_d = wrld.exitcell[1]
+
+            # Normalization factor
+            norm = (wrld.width() ** 2 + wrld.height() ** 2) ** .5
+
+            return (((x - x_d) ** 2 + (y - y_d) ** 2) ** .5) / norm
+        else:
+            return 1
+
+    def get_a_star(self, wrld):
         me = wrld.me(self)
         if me is not None:
             x = me.x
@@ -292,6 +289,28 @@ class TestCharacter(CharacterEntity):
 
         return list_of_worlds
 
+    def get_action_to_coord(self, coord):
+        x = self.x
+        y = self.y
+
+        if coord == (x, y):
+            action = 'STAY'
+        elif coord == (x + 1, y):
+            action = "RIGHT"
+        elif coord == (x + 1, y + 1):
+            action = "RIGHT_DOWN"
+        elif coord == (x, y + 1):
+            action = "DOWN"
+        elif coord == (x - 1, y + 1):
+            action = "DOWN_LEFT"
+        elif coord == (x - 1, y):
+            action = "LEFT"
+        elif coord == (x - 1, y - 1):
+            action = "LEFT_UP"
+        elif coord == (x, y - 1):
+            action = "UP"
+        elif coord == (x + 1, y - 1):
+            action = "UP_RIGHT"
 
 
 def heuristic(a, b):
@@ -307,28 +326,28 @@ def a_star(wrld, start, goal):
     costs = {}
     came_from[start] = None
     costs[start] = 0
-    children = []
 
     while not queue.empty():
         current = queue.get()
+        children = []
         if current == goal:
             break
         (x, y) = current
-        if x - 1 >= 0:
+        if x - 1 >= 0 and not wrld.wall_at(x - 1, y):
             children.append((x - 1, y))
-        if y + 1 < wrld.height():
+        if y + 1 < wrld.height() and not wrld.wall_at(x, y + 1):
             children.append((x, y + 1))
-        if x + 1 < wrld.width():
+        if x + 1 < wrld.width() and not wrld.wall_at(x + 1, y):
             children.append((x + 1, y))
-        if y - 1 >= 0:
+        if y - 1 >= 0 and not wrld.wall_at(x, y - 1):
             children.append((x, y - 1))
-        if x - 1 >= 0 and y + 1 < wrld.height():
+        if x - 1 >= 0 and y + 1 < wrld.height() and not wrld.wall_at(x - 1, y + 1):
             children.append((x - 1, y + 1))
-        if x + 1 < wrld.width() and y + 1 < wrld.height():
+        if x + 1 < wrld.width() and y + 1 < wrld.height() and not wrld.wall_at(x + 1, y + 1):
             children.append((x + 1, y + 1))
-        if x - 1 >= 0 and y - 1 >= 0:
+        if x - 1 >= 0 and y - 1 >= 0 and not wrld.wall_at(x - 1, y - 1):
             children.append((x - 1, y - 1))
-        if x + 1 < wrld.width() and y - 1 >= 0:
+        if x + 1 < wrld.width() and y - 1 >= 0 and not wrld.wall_at(x + 1, y - 1):
             children.append((x + 1, y - 1))
         for child in children:
             cost = costs[current] + 1
@@ -337,4 +356,16 @@ def a_star(wrld, start, goal):
                 priority = cost + heuristic(goal, child)
                 queue.put(child, priority)
                 came_from[child] = current
-    return costs[goal]
+    return costs, came_from, generate_path(came_from, goal)
+    # return queue
+
+
+def generate_path(came_from, end):
+    current = end
+    path = []
+    while current is not None:
+        path.append(came_from[current])
+        current = came_from[current]
+    return path
+
+
