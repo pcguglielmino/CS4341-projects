@@ -24,6 +24,8 @@ class Actions(Enum):
     BOMB = 8
     STAY = 9
     FOLLOW_A_STAR = 10
+    RUN_AWAY_BOMB = 11
+    RUN_AWAY_EXPLOSION = 12
 
 
 # This function iterates through the Q_table containing the function names and the weights of those functions,
@@ -42,9 +44,21 @@ def q_value(new_wrld, lof):
 
 # This function calculates the reward of going from one world to a new world
 def calculate_reward(wrld, new_wrld):
-    score_diff = new_wrld.scores["me"] - wrld.scores["me"]
+    events = new_wrld[1]
+    event_score = 0
+    for e in events:
+        if e.tpe == 4:
+            event_score += 1000
+        if e.tpe == 2 or e.tpe == 3 and e.character.name == 'me':
+            event_score -= 100000
+        if e.tpe == 0:
+            event_score += 10
+        if e.tpe == 1:
+            event_score += 100
+
+    score_diff = new_wrld[0].scores["me"] - wrld.scores["me"]
     cost_of_living = 2
-    return score_diff - cost_of_living
+    return score_diff - cost_of_living + event_score
 
 
 class TestCharacter(CharacterEntity):
@@ -60,16 +74,16 @@ class TestCharacter(CharacterEntity):
         self.epsilon_rate = 0.3  # How fast should epsilon decrease
         self.path = []
         self.path_search = 0
-        seed(2)
+        self.danger_radius = 5
+        seed(10)
 
     def do(self, wrld):
         # List of functions to use to approximate the Q state (add to this as more functions are implemented)
-        # Q_WEIGHTS = {'path_length': -10, 'nearbyMonster': -10.568145805619604, 'nearbyExplosion': 0.0, 'nearbyWall': -3.9782382733913524, 'isThereMonster': 0.0}
 
         self.path = self.get_a_star(wrld)
         self.path_search = 0
 
-        lof = [self.path_length, self.nearbyMonster, self.nearbyExplosion, self.nearbyWall, self.isThereMonster]
+        lof = [self.path_length, self.nearby_monster, self.bomb_threat, self.explosion_threat, self.nearby_wall, self.is_there_monster]
 
         low = self.get_next_worlds(wrld)  # list of worlds in (world, action.name) tuples
 
@@ -91,7 +105,7 @@ class TestCharacter(CharacterEntity):
 
                 q_s_a = action_tuple[0]
                 alpha = self.learning_step / self.learning_limit
-                r = calculate_reward(wrld, action_tuple[2])
+                r = calculate_reward(wrld, (action_tuple[2], action_tuple[3]))
 
                 lonw = self.get_next_worlds(action_tuple[2])
                 lonq = []
@@ -119,7 +133,16 @@ class TestCharacter(CharacterEntity):
         action = action_tuple[1]
 
         if action == 'FOLLOW_A_STAR':
-            action = self.get_action_to_coord(self.path.pop(0))
+            if self.path is None or self.path[(self.x, self.y)] is None:
+                self.move(0, 0)
+            else:
+                action = self.coord_to_action(self.path.pop(0))
+
+        if action == 'RUN_AWAY_BOMB':
+            action = self.coord_to_action(self.run_away_bomb(wrld))
+
+        if action == 'RUN_AWAY_EXPLOSION':
+            action = self.coord_to_action(self.run_away_explosion(wrld))
 
         if action == 'UP':
             self.move(0, -1)
@@ -138,8 +161,7 @@ class TestCharacter(CharacterEntity):
         elif action == 'LEFT_UP':
             self.move(-1, -1)
         elif action == 'BOMB':
-            pass
-            #self.place_bomb()
+            self.place_bomb()
         elif action == 'STAY':
             self.move(0, 0)
 
@@ -175,7 +197,7 @@ class TestCharacter(CharacterEntity):
 
             return a_star(wrld, (x, y), (x_d, y_d))
 
-    def nearbyMonster(self, wrld):
+    def nearby_monster(self, wrld):
         me = wrld.me(self)
         if me is not None:
             x = me.x
@@ -200,7 +222,7 @@ class TestCharacter(CharacterEntity):
                 if wrld.monsters_at(x + 1, y - 1): return 1
         return 0
 
-    def nearbyWall(self, wrld):
+    def nearby_wall(self, wrld):
         me = wrld.me(self)
         if me is not None:
             x = me.x
@@ -225,43 +247,109 @@ class TestCharacter(CharacterEntity):
                 if wrld.wall_at(x + 1, y - 1): return 0
         return 1
 
-    def nearbyExplosion(self, wrld):
+    # identify if there is a bomb close, and if there is, return the average distance from me to the bombs
+    def bomb_threat(self, wrld):
         me = wrld.me(self)
         if me is not None:
             x = me.x
             y = me.y
             width = wrld.width()
-            heigth = wrld.height()
-            if x - 1 >= 0:
-                if wrld.explosion_at(x - 1, y): return 1
-            if y + 1 < heigth:
-                if wrld.explosion_at(x, y + 1): return 1
-            if x + 1 < width:
-                if wrld.explosion_at(x + 1, y): return 1
-            if y - 1 >= 0:
-                if wrld.explosion_at(x, y - 1): return 1
-            if x - 1 >= 0 and y + 1 < heigth:
-                if wrld.explosion_at(x - 1, y + 1): return 1
-            if x + 1 < width and y + 1 < heigth:
-                if wrld.explosion_at(x + 1, y + 1): return 1
-            if x - 1 >= 0 and y - 1 >= 0:
-                if wrld.explosion_at(x - 1, y - 1): return 1
-            if x + 1 < width and y - 1 >= 0:
-                if wrld.explosion_at(x + 1, y - 1): return 1
-        return 0
+            height = wrld.height()
 
-    def isThereMonster(self, wrld):
+            radius = self.danger_radius
+
+            x_range_high = x + radius
+            x_range_low = x - radius
+
+            y_range_high = y + radius
+            y_range_low = y - radius
+
+            if x_range_high > width:
+                x_range_high = width
+            if x_range_low < 0:
+                x_range_low = 0
+            if y_range_high > height:
+                y_range_high = height
+            if y_range_low < 0:
+                y_range_low = 0
+
+            lob = []  # list of bombs
+
+            for i in range(x_range_low, x_range_high):
+                for j in range(y_range_low, y_range_high):
+                    if wrld.bomb_at(i, j):
+                        lob.append((i, j))
+
+            if len(lob) == 0:
+                return 1
+            else:
+                path = 0
+                for bomb in lob:
+                    path += len(a_star(wrld, (x, y), (bomb[0], bomb[1])))
+                avg = path / len(lob)
+                return 0 - (avg / (wrld.height() ** 2 + wrld.width() ** 2) ** 0.5)
+        else:
+            return 0
+
+    def explosion_threat(self, wrld):
         me = wrld.me(self)
         if me is not None:
             x = me.x
             y = me.y
             width = wrld.width()
-            heigth = wrld.height()
-            for i in range(0, heigth):
+            height = wrld.height()
+
+            radius = self.danger_radius
+
+            x_range_high = x + radius
+            x_range_low = x - radius
+
+            y_range_high = y + radius
+            y_range_low = y - radius
+
+            if x_range_high > width:
+                x_range_high = width
+            if x_range_low < 0:
+                x_range_low = 0
+            if y_range_high > height:
+                y_range_high = height
+            if y_range_low < 0:
+                y_range_low = 0
+
+            loe = []  # list of explosions
+
+            for i in range(x_range_low, x_range_high):
+                for j in range(y_range_low, y_range_high):
+                    if wrld.explosion_at(i, j):
+                        loe.append((i, j))
+
+            if len(loe) == 0:
+                return 1
+            else:
+                path = 0
+                for explosion in loe:
+                    star = a_star(wrld, (x, y), (explosion[0], explosion[1]))
+                    if star is not None:
+                        path += len(star)
+                    else:
+                        return 0
+                avg = path / len(loe)
+                return 0 - (avg / (wrld.height() ** 2 + wrld.width() ** 2) ** 0.5)
+        else:
+            return 0
+
+    def is_there_monster(self, wrld):
+        me = wrld.me(self)
+        if me is not None:
+            x = me.x
+            y = me.y
+            width = wrld.width()
+            height = wrld.height()
+            for i in range(0, height):
                 for j in range(0, width):
                     if wrld.monsters_at(i, j):
-                        return 1
-        return 0
+                        return 0
+        return 1
 
     # This functions selects an action from the list of q_values
     def select_action(self, loq):
@@ -298,23 +386,27 @@ class TestCharacter(CharacterEntity):
                 elif member == Actions.LEFT_UP:
                     me.move(-1, -1)
                 elif member == Actions.BOMB:
-                    #me.place_bomb()
-                    pass
+                    me.place_bomb()
                 elif member == Actions.STAY:
                     me.move(0, 0)
                 elif member == Actions.FOLLOW_A_STAR:
-                    if self.path_search <= len(self.path):
+                    if self.path is None or self.path[(self.x, self.y)] is None:
+                        me.move(0, 0)
+                    elif self.path_search <= len(self.path):
                         self.path_search = len(self.path) - 1
-                    next_pos = self.path[self.path_search]
-                    self.path_search += 1
-                    me.move(next_pos[0] - me.x, next_pos[0] - me.y)
+                        next_pos = self.path[self.path_search]
+                        self.path_search += 1
+                        me.move(next_pos[0] - me.x, next_pos[1] - me.y)
+                elif member == Actions.RUN_AWAY_BOMB:
+                    coord = self.run_away_bomb(wrld)
+                    me.move(coord[0] - me.x, coord[1] - me.y)
                 list_of_worlds.append((wrld.next(), name))
         else:
             list_of_worlds.append((wrld.next(), "DEAD"))
 
         return list_of_worlds
 
-    def get_action_to_coord(self, coord):
+    def coord_to_action(self, coord):
         x = self.x
         y = self.y
 
@@ -338,6 +430,140 @@ class TestCharacter(CharacterEntity):
             action = "UP_RIGHT"
         return action
 
+    def run_away_bomb(self, wrld):
+        me = wrld.me(self)
+        x = me.x
+        y = me.y
+
+        width = wrld.width()
+        height = wrld.height()
+
+        radius = self.danger_radius
+
+        x_range_high = x + radius
+        x_range_low = x - radius
+
+        y_range_high = y + radius
+        y_range_low = y - radius
+
+        if x_range_high > width:
+            x_range_high = width
+        if x_range_low < 0:
+            x_range_low = 0
+        if y_range_high > height:
+            y_range_high = height
+        if y_range_low < 0:
+            y_range_low = 0
+
+        lob = []  # list of bombs
+
+        for i in range(x_range_low, x_range_high):
+            for j in range(y_range_low, y_range_high):
+                if wrld.bomb_at(i, j):
+                    lob.append((i, j))
+
+        lor = [(-1, (x, y))]  # list of retreats
+
+        for b in lob:
+            lor.append(self.run_away(b, wrld))
+
+        retreat = max(lor)
+
+        return retreat[1]
+
+    def run_away_explosion(self, wrld):
+        me = wrld.me(self)
+        x = me.x
+        y = me.y
+        width = wrld.width()
+        height = wrld.height()
+
+        radius = self.danger_radius
+
+        x_range_high = x + radius
+        x_range_low = x - radius
+
+        y_range_high = y + radius
+        y_range_low = y - radius
+
+        if x_range_high > width:
+            x_range_high = width
+        if x_range_low < 0:
+            x_range_low = 0
+        if y_range_high > height:
+            y_range_high = height
+        if y_range_low < 0:
+            y_range_low = 0
+
+        loe = []  # list of explosions
+
+        for i in range(x_range_low, x_range_high):
+            for j in range(y_range_low, y_range_high):
+                if wrld.explosion_at(i, j):
+                    loe.append((i, j))
+
+        lor = [(-1, (x, y))]  # list of retreats
+
+        for e in loe:
+            lor.append(self.avoid_explosion(e, wrld))
+
+        retreat = max(lor)
+
+        return retreat[1]
+
+    def run_away(self, danger_coord, wrld):
+        me = wrld.me(self)
+        x = me.x
+        y = me.y
+
+        flee = [(-1, (0, 0))]  # if all else fails, stand still and accept death
+
+        possibilities = get_adjacent((x, y), wrld)
+
+        for p in possibilities:
+            if not wrld.wall_at(p[0], p[1]) and not wrld.monsters_at(p[0], p[1]):
+                distance = ((danger_coord[0] - p[0]) ** 2 + (danger_coord[1] - p[1]) ** 2) ** 0.5
+                flee.append((distance, p))
+
+        flee = sorted(flee)
+
+        return max(flee)
+
+    def avoid_explosion(self, danger_coord, wrld):
+        me = wrld.me(self)
+        x = me.x
+        y = me.y
+
+        flee = [(-1, (0, 0))]  # if all else fails, stand still and accept death
+
+        possibilities = get_adjacent((x, y), wrld)
+
+        for p in possibilities:
+            if not wrld.wall_at(p[0], p[1]) and not wrld.monsters_at(p[0], p[1]):
+                if (danger_coord[0] - p[0]) != 0 and (danger_coord[1] - p[1]) != 0:  # not on the same line as bomb
+                    distance = ((danger_coord[0] - p[0]) ** 2 + (danger_coord[1] - p[1]) ** 2) ** 0.5
+                    flee.append((distance, p))
+                else:
+                    flee.append((-1, p))
+
+        flee = sorted(flee)
+
+        return max(flee)
+
+
+# Get a list of all adjacent cells (i.e. not out of bounds)
+def get_adjacent(coord, wrld):
+    x = coord[0]
+    y = coord[1]
+
+    loc = []
+
+    for i in range(-1, 2):
+        for j in range(-1, 2):
+            if wrld.width() > (x + i) >= 0 and wrld.height() > (y + j) >= 0:
+                loc.append((x + i, y + j))
+
+    return loc
 
 def heuristic(a, b):
     (x1, y1) = a
@@ -359,21 +585,21 @@ def a_star(wrld, start, goal):
         if current == goal:
             break
         (x, y) = current
-        if x - 1 >= 0 and not wrld.wall_at(x - 1, y):
+        if x - 1 >= 0 and not wrld.wall_at(x - 1, y) and not wrld.monsters_at(x - 1, y):
             children.append((x - 1, y))
-        if y + 1 < wrld.height() and not wrld.wall_at(x, y + 1):
+        if y + 1 < wrld.height() and not wrld.wall_at(x, y + 1) and not wrld.monsters_at(x, y + 1):
             children.append((x, y + 1))
-        if x + 1 < wrld.width() and not wrld.wall_at(x + 1, y):
+        if x + 1 < wrld.width() and not wrld.wall_at(x + 1, y) and not wrld.monsters_at(x + 1, y):
             children.append((x + 1, y))
-        if y - 1 >= 0 and not wrld.wall_at(x, y - 1):
+        if y - 1 >= 0 and not wrld.wall_at(x, y - 1) and not wrld.monsters_at(x, y - 1):
             children.append((x, y - 1))
-        if x - 1 >= 0 and y + 1 < wrld.height() and not wrld.wall_at(x - 1, y + 1):
+        if x - 1 >= 0 and y + 1 < wrld.height() and not wrld.wall_at(x - 1, y + 1) and not wrld.monsters_at(x - 1, y + 1):
             children.append((x - 1, y + 1))
-        if x + 1 < wrld.width() and y + 1 < wrld.height() and not wrld.wall_at(x + 1, y + 1):
+        if x + 1 < wrld.width() and y + 1 < wrld.height() and not wrld.wall_at(x + 1, y + 1) and not wrld.monsters_at(x + 1, y + 1):
             children.append((x + 1, y + 1))
-        if x - 1 >= 0 and y - 1 >= 0 and not wrld.wall_at(x - 1, y - 1):
+        if x - 1 >= 0 and y - 1 >= 0 and not wrld.wall_at(x - 1, y - 1) and not wrld.monsters_at(x - 1, y - 1):
             children.append((x - 1, y - 1))
-        if x + 1 < wrld.width() and y - 1 >= 0 and not wrld.wall_at(x + 1, y - 1):
+        if x + 1 < wrld.width() and y - 1 >= 0 and not wrld.wall_at(x + 1, y - 1) and not wrld.monsters_at(x + 1, y - 1):
             children.append((x + 1, y - 1))
         for child in children:
             cost = costs[current] + 1
@@ -382,6 +608,8 @@ def a_star(wrld, start, goal):
                 priority = cost + heuristic(goal, child)
                 queue.put(child, priority)
                 came_from[child] = current
+    if goal not in came_from:
+        return came_from
     path = generate_path(came_from, goal)
     return path
 
