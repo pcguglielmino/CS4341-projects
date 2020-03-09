@@ -67,7 +67,7 @@ class TestCharacter(CharacterEntity):
         CharacterEntity.__init__(self, name, avatar, x, y)
         self.learning_limit = 100
         self.learning_step = self.learning_limit
-        self.is_learning = True
+        self.is_learning = False
         self.discount = 0.9
         self.epsilon_start = 0.95
         self.epsilon = self.epsilon_start
@@ -133,7 +133,7 @@ class TestCharacter(CharacterEntity):
         action = action_tuple[1]
 
         if action == 'FOLLOW_A_STAR':
-            if self.path is None or self.path[(self.x, self.y)] is None:
+            if self.path is None:
                 self.move(0, 0)
             else:
                 action = self.coord_to_action(self.path.pop(0))
@@ -390,7 +390,7 @@ class TestCharacter(CharacterEntity):
                 elif member == Actions.STAY:
                     me.move(0, 0)
                 elif member == Actions.FOLLOW_A_STAR:
-                    if self.path is None or self.path[(self.x, self.y)] is None:
+                    if self.path is None:
                         me.move(0, 0)
                     elif self.path_search <= len(self.path):
                         self.path_search = len(self.path) - 1
