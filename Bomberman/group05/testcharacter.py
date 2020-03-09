@@ -51,22 +51,25 @@ class TestCharacter(CharacterEntity):
 
     def __init__(self, name, avatar, x, y):
         CharacterEntity.__init__(self, name, avatar, x, y)
-        self.learning_limit = 5000
+        self.learning_limit = 100
         self.learning_step = self.learning_limit
         self.is_learning = True
         self.discount = 0.9
         self.epsilon_start = 0.95
         self.epsilon = self.epsilon_start
-        self.epsilon_rate = 2  # How fast should epsilon decrease
+        self.epsilon_rate = 0.3  # How fast should epsilon decrease
         self.path = []
+        self.path_search = 0
         seed(2)
 
     def do(self, wrld):
         # List of functions to use to approximate the Q state (add to this as more functions are implemented)
+        # Q_WEIGHTS = {'path_length': -10, 'nearbyMonster': -10.568145805619604, 'nearbyExplosion': 0.0, 'nearbyWall': -3.9782382733913524, 'isThereMonster': 0.0}
 
         self.path = self.get_a_star(wrld)
+        self.path_search = 0
 
-        lof = [self.distance_to_exit, self.nearbyMonster, self.nearbyExplosion, self.nearbyWall, self.isThereMonster]
+        lof = [self.path_length, self.nearbyMonster, self.nearbyExplosion, self.nearbyWall, self.isThereMonster]
 
         low = self.get_next_worlds(wrld)  # list of worlds in (world, action.name) tuples
 
@@ -115,8 +118,6 @@ class TestCharacter(CharacterEntity):
 
         action = action_tuple[1]
 
-        action = "FOLLOW_A_STAR"
-
         if action == 'FOLLOW_A_STAR':
             action = self.get_action_to_coord(self.path.pop(0))
 
@@ -154,6 +155,13 @@ class TestCharacter(CharacterEntity):
             norm = (wrld.width() ** 2 + wrld.height() ** 2) ** .5
 
             return (((x - x_d) ** 2 + (y - y_d) ** 2) ** .5) / norm
+        else:
+            return 1
+
+    def path_length(self, wrld):
+        path = self.get_a_star(wrld)
+        if path is not None:
+            return 1 - (len(path) / (wrld.height() ** 2 + wrld.width() ** 2) ** 0.5)
         else:
             return 1
 
@@ -198,24 +206,24 @@ class TestCharacter(CharacterEntity):
             x = me.x
             y = me.y
             width = wrld.width()
-            heigth = wrld.height()
+            height = wrld.height()
             if x - 1 >= 0:
-                if wrld.wall_at(x - 1, y): return 1
-            if y + 1 < heigth:
-                if wrld.wall_at(x, y + 1): return 1
+                if wrld.wall_at(x - 1, y): return 0
+            if y + 1 < height:
+                if wrld.wall_at(x, y + 1): return 0
             if x + 1 < width:
-                if wrld.wall_at(x + 1, y): return 1
+                if wrld.wall_at(x + 1, y): return 0
             if y - 1 >= 0:
-                if wrld.wall_at(x, y - 1): return 1
-            if x - 1 >= 0 and y + 1 < heigth:
-                if wrld.wall_at(x - 1, y + 1): return 1
-            if x + 1 < width and y + 1 < heigth:
-                if wrld.wall_at(x + 1, y + 1): return 1
+                if wrld.wall_at(x, y - 1): return 0
+            if x - 1 >= 0 and y + 1 < height:
+                if wrld.wall_at(x - 1, y + 1): return 0
+            if x + 1 < width and y + 1 < height:
+                if wrld.wall_at(x + 1, y + 1): return 0
             if x - 1 >= 0 and y - 1 >= 0:
-                if wrld.wall_at(x - 1, y - 1): return 1
+                if wrld.wall_at(x - 1, y - 1): return 0
             if x + 1 < width and y - 1 >= 0:
-                if wrld.wall_at(x + 1, y - 1): return 1
-        return 0
+                if wrld.wall_at(x + 1, y - 1): return 0
+        return 1
 
     def nearbyExplosion(self, wrld):
         me = wrld.me(self)
@@ -257,9 +265,12 @@ class TestCharacter(CharacterEntity):
 
     # This functions selects an action from the list of q_values
     def select_action(self, loq):
-        val = random()
-        if val < self.epsilon:
-            return choice(loq)
+        if self.is_learning:
+            val = random()
+            if val < self.epsilon:
+                return choice(loq)
+            else:
+                return max(loq)
         else:
             return max(loq)
 
@@ -292,8 +303,11 @@ class TestCharacter(CharacterEntity):
                 elif member == Actions.STAY:
                     me.move(0, 0)
                 elif member == Actions.FOLLOW_A_STAR:
-                    pass
-                    # me.move
+                    if self.path_search <= len(self.path):
+                        self.path_search = len(self.path) - 1
+                    next_pos = self.path[self.path_search]
+                    self.path_search += 1
+                    me.move(next_pos[0] - me.x, next_pos[0] - me.y)
                 list_of_worlds.append((wrld.next(), name))
         else:
             list_of_worlds.append((wrld.next(), "DEAD"))
